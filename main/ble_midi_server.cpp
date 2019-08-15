@@ -15,7 +15,7 @@
 
 
 static char LOG_TAG[] = "BLE MIDI Test";
-
+extern xQueueHandle trig_queue;
 uint8_t note = 64;
 
 BLECharacteristic *pCharacteristic;
@@ -37,16 +37,21 @@ uint8_t midiPacket[] = {
 
 class SendMIDITask: public Task {
 public:
-	xQueueHandle triggerQueue_;
+	xQueueHandle *triggerQueue_;
 
-	SendMIDITask(xQueueHandle *triggerQueue) : triggerQueue_(&triggerQueue) {}
+	SendMIDITask(xQueueHandle triggerQueue) { 
+		triggerQueue_ = &triggerQueue;
+	}
 
 	void run(void *data) {
 		// uint16_t adc_val = 0;
     	gpio_num_t io_num;
+		BaseType_t xTaskWokenByReceive = pdFALSE;
+
+		ESP_LOGI("SendMIDITask", "Running...\n");
 
 		while(1) {
-			if (xQueueReceive(triggerQueue_, &io_num, portMAX_DELAY)) {
+			if (xQueueReceive(trig_queue, &io_num, portMAX_DELAY)) {
 				note = (note + 17) & 0x7F;
 				// note down
 				midiPacket[2] = 0x90; // note down, channel 0
@@ -89,6 +94,9 @@ class MIDIServerCallbacks: public BLEServerCallbacks {
 void start_ble_midi_server(xQueueHandle *queue)
 {
 	uint32_t properites = BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_WRITE_NR;
+
+	ESP_LOGI("start_ble_midi_server()"," got &queue addr = 0x%08x\n", (uint32_t)(&queue));
+	ESP_LOGI("start_ble_midi_server()"," got queue addr = 0x%08x\n", (uint32_t)(queue));
 
 	pSendMIDITask = new SendMIDITask(queue);
 	pSendMIDITask->setStackSize(8000);
